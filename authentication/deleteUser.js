@@ -4,11 +4,11 @@ import { db } from '../app.js';
 export async function deleteUser(req, res) {
 
   try {
-    // Delete the user
-    const [deletedUser] = await db.promise().query('DELETE FROM users WHERE id = ?', [req.params.id]);
+    // only user with status "ADMIN" can Delete the user 
+    const [deletedUser] = await db.promise().query('DELETE FROM users WHERE id = ? AND status = ?', [req.params.id, 'CLIENT']);
 
     if (deletedUser.affectedRows === 0) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: 'User not found or not authorized to delete' });
     }
     //get user deleted
     const [user] = await db.promise().query('SELECT * FROM users WHERE id = ?', [req.params.id]);

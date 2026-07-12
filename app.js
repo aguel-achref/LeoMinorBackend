@@ -4,11 +4,16 @@ import morgan from 'morgan';
 import dotenv from 'dotenv'; 
 import mysql from 'mysql2'; 
 import userRoutes from './routes/authentication.js'; 
-import carRoutes from './routes/car.js';
+import commandeRoutes from './routes/commande.js';
+import cors from "cors";
+
 
 dotenv.config();
 
 const app = express();
+
+app.use(cors());
+app.use(express.json()); 
 
 // Get the current directory using import.meta.url
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
@@ -21,7 +26,7 @@ app.use(express.static(path.join(__dirname, 'public')));  // Now you can safely 
 
 // Use the user routes for user-related API endpoints
 app.use('/api/users', userRoutes);
-app.use('/api/cars', carRoutes);
+app.use('/api/commandes', commandeRoutes);
 
 // Create MySQL connection
 export const db = mysql.createConnection({
