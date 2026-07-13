@@ -1,5 +1,35 @@
 import { db } from '../app.js';
 
+// Convertit une valeur de date venant de MySQL (objet Date, string ISO "AAAA-MM-JJ",
+// ou deja au format "JJ/MM/AAAA") en une chaine normalisee "JJ/MM/AAAA".
+// Utilise les getters UTC pour eviter tout decalage de fuseau horaire.
+function formatDateFR(value) {
+  if (!value) return null;
+
+  // Deja au bon format
+  if (typeof value === 'string' && value.includes('/')) {
+    return value;
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const jour = String(date.getUTCDate()).padStart(2, '0');
+  const mois = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const annee = date.getUTCFullYear();
+  return `${jour}/${mois}/${annee}`;
+}
+
+// Normalise les 3 champs date d'une commande au format "JJ/MM/AAAA"
+function normaliserDatesCommande(commande) {
+  return {
+    ...commande,
+    date_debut_production: formatDateFR(commande.date_debut_production),
+    date_fin_production: formatDateFR(commande.date_fin_production),
+    date_mise_disposition: formatDateFR(commande.date_mise_disposition),
+  };
+}
+
 // Convertit une date au format "JJ/MM/AAAA" (front) en objet Date JS valide
 function parseFrenchDate(dateStr) {
   if (!dateStr) return null;
@@ -73,11 +103,15 @@ function trierParDateDebutProductionAsc(commandes) {
 // Function to get all commandes
 export async function getAllCommandes(req, res) {
   try {
-    const [commandes] = await db.promise().query('SELECT * FROM commandes');
+    const [commandesBrutes] = await db.promise().query('SELECT * FROM commandes');
 
-    if (commandes.length === 0) {
+    if (commandesBrutes.length === 0) {
       return res.status(404).json({ message: 'commandes not found' });
     }
+
+    // On normalise d'abord toutes les dates au format "JJ/MM/AAAA",
+    // quel que soit le format renvoye par MySQL (objet Date, string ISO, etc.)
+    const commandes = commandesBrutes.map(normaliserDatesCommande);
 
     // Regles de mise a jour automatique du statut :
     // - date_mise_disposition == aujourd'hui         -> "Jour disposition"
