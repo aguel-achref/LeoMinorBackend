@@ -63,7 +63,7 @@ app.use((err, req, res, next) => {
 });
 
 // Set the port
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 // Start the server
 app.listen(PORT, () => {

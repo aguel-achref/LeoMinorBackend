@@ -83,6 +83,8 @@ export async function createCommande(req, res) {
   const {
     chaine,
     commande,
+    client,
+    num_semaine,
     description,
     date_debut_production,
     date_fin_production,
@@ -109,6 +111,8 @@ export async function createCommande(req, res) {
     if (
       !chaine ||
       !commande ||
+      !client ||
+      !num_semaine ||
       !qté_commandé ||
       !description ||
       !date_debut_production ||
@@ -121,7 +125,7 @@ export async function createCommande(req, res) {
       return res.status(400).json({
         success: false,
         message:
-          'All fields are required: chaine, commande, qté_commandé, description, date_debut_production, date_fin_production, date_mise_disposition, ecart, objectif, code_commande.'
+          'All fields are required: chaine, commande, client, num_semaine, qté_commandé, description, date_debut_production, date_fin_production, date_mise_disposition, ecart, objectif, code_commande.'
       });
     }
 
@@ -139,6 +143,8 @@ export async function createCommande(req, res) {
         chaine,
         statut,
         commande,
+        client,
+        num_semaine,
         qté_commandé,
         description,
         date_debut_production,
@@ -148,13 +154,15 @@ export async function createCommande(req, res) {
         ecart,
         objectif,
         code_commande
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         userId,
         chaine,
         statut,
         commande,
+        client,
+        num_semaine,
         qté_commandé,
         description,
         date_debut_production,
