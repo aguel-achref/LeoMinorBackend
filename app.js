@@ -7,7 +7,6 @@ import userRoutes from './routes/authentication.js';
 import commandeRoutes from './routes/commande.js';
 import cors from "cors";
 
-
 dotenv.config();
 
 const app = express();
@@ -22,27 +21,40 @@ const __dirname = path.dirname(new URL(import.meta.url).pathname);
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));  // Now you can safely use __dirname here
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Use the user routes for user-related API endpoints
 app.use('/api/users', userRoutes);
 app.use('/api/commandes', commandeRoutes);
 
-// Create MySQL connection
-export const db = mysql.createConnection({
+// Create MySQL connection pool (instead of a single connection)
+export const db = mysql.createPool({
   host: process.env.DB_HOST,
   port: process.env.DB_PORT,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME
+  database: process.env.DB_NAME,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000
 });
 
-// Connect to MySQL
-db.connect((err) => {
+// Garde le pool actif en évitant les connexions mortes/inactives
+setInterval(() => {
+  db.query('SELECT 1', (err) => {
+    if (err) console.error('Keep-alive ping failed:', err.message);
+  });
+}, 30000); // toutes les 30 secondes
+
+// Test the pool connection once at startup
+db.getConnection((err, connection) => {
   if (err) {
     console.error('Error connecting to MySQL:', err.message);
   } else {
     console.log('Connected to MySQL database');
+    connection.release();
   }
 });
 
