@@ -7,10 +7,10 @@ import { getOneClient } from '../client/getOne';
 const router = express.Router(); 
 
 // Define the routes
-router.post('/createClient', authenticateToken, createCommande); 
-router.delete('/deleteClient/:id', authenticateToken, deleteCommande);
-router.get('/getOneClient/:id', getOneCommande);
-router.get('/getAllClient', getAllCommandes);
+router.post('/createClient', authenticateToken, createClient); 
+router.delete('/deleteClient/:id', authenticateToken, deleteClient);
+router.get('/getOneClient/:id', getOneClient);
+router.get('/getAllClient', getAllClient);
 
 
 export default router; 
