@@ -1,8 +1,8 @@
 import express from 'express'; 
-import { createClient } from '../client/create';
-import { deleteClient } from '../client/delete';
-import { getAllClient } from '../client/getAll';
-import { getOneClient } from '../client/getOne';
+import { createClient } from '../client/create.js';
+import { deleteClient } from '../client/delete.js';
+import { getAllClient } from '../client/getAll.js';
+import { getOneClient } from '../client/getOne.js';
 
 const router = express.Router(); 
 
