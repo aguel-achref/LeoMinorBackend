@@ -78,6 +78,33 @@ function calculerNombreJours(qte_commande, objectif) {
   return Math.ceil(qte / obj);
 }
 
+/**
+ * Calcule automatiquement l'objectif horaire via une requête SQL nommée "obj_heure".
+ * Formule : objectif_heure = objectif (quotidien) / nombre d'heures de travail par jour.
+ *
+ * Le calcul est délégué à MySQL (plutôt qu'à du JS) pour rester cohérent
+ * avec la demande : la requête s'appelle obj_heure.
+ *
+ * @param {number} objectif - objectif quotidien de production
+ * @param {number} [heuresParJour=8] - nombre d'heures de travail par jour
+ * @returns {Promise<number>} objectif_heure calculé (arrondi à 2 décimales)
+ */
+async function calculerObjectifHeure(objectif, heuresParJour = 9) {
+  const obj = Number(objectif);
+
+  if (!obj || isNaN(obj) || !heuresParJour) {
+    return 0;
+  }
+
+  // Requête SQL nommée "obj_heure" : calcule objectif_heure = objectif / heuresParJour
+  const [obj_heure] = await db.promise().query(
+    `SELECT ROUND(? / ?, 2) AS objectif_heure`,
+    [obj, heuresParJour]
+  );
+
+  return obj_heure[0].objectif_heure;
+}
+
 // Function to create a commande
 export async function createCommande(req, res) {
   const {
@@ -91,8 +118,7 @@ export async function createCommande(req, res) {
     date_mise_disposition,
     ecart,
     objectif,
-    qté_commandé,
-    code_commande
+    qté_commandé
   } = req.body;
 
   const id = uuidv4();
@@ -107,7 +133,7 @@ export async function createCommande(req, res) {
   }
 
   try {
-    // Validate required fields (statut et nombre_jours retires : calcules automatiquement)
+    // Validate required fields (statut, nombre_jours et objectif_heure retires : calcules automatiquement)
     if (
       !chaine ||
       !commande ||
@@ -119,13 +145,12 @@ export async function createCommande(req, res) {
       !date_fin_production ||
       !date_mise_disposition ||
       ecart === undefined ||
-      objectif === undefined ||
-      !code_commande
+      objectif === undefined
     ) {
       return res.status(400).json({
         success: false,
         message:
-          'All fields are required: chaine, commande, client, num_semaine, qté_commandé, description, date_debut_production, date_fin_production, date_mise_disposition, ecart, objectif, code_commande.'
+          'All fields are required: chaine, commande, client, num_semaine, qté_commandé, description, date_debut_production, date_fin_production, date_mise_disposition, ecart, objectif.'
       });
     }
 
@@ -134,6 +159,9 @@ export async function createCommande(req, res) {
 
     // Calcul automatique du nombre de jours : qté_commandé / objectif
     const nombre_jours = calculerNombreJours(qté_commandé, objectif);
+
+    // Calcul automatique de l'objectif horaire via la requete SQL "obj_heure"
+    const objectif_heure = await calculerObjectifHeure(objectif);
 
     // Insert the commande
     const [result] = await db.promise().query(
@@ -153,7 +181,7 @@ export async function createCommande(req, res) {
         nombre_jours,
         ecart,
         objectif,
-        code_commande
+        objectif_heure
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
@@ -171,7 +199,7 @@ export async function createCommande(req, res) {
         nombre_jours,
         ecart,
         objectif,
-        code_commande
+        objectif_heure
       ]
     );
 
