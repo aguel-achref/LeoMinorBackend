@@ -1,26 +1,48 @@
-import express from 'express'; 
-import path from 'path'; 
-import morgan from 'morgan'; 
-import dotenv from 'dotenv'; 
-import mysql from 'mysql2'; 
-import userRoutes from './routes/authentication.js'; 
+import express from 'express';
+import path from 'path';
+import morgan from 'morgan';
+import dotenv from 'dotenv';
+import mysql from 'mysql2';
+import userRoutes from './routes/authentication.js';
 import commandeRoutes from './routes/commande.js';
-import clientRoutes from './routes/client.js'
-import cors from "cors";
+import clientRoutes from './routes/client.js';
+import cors from 'cors';
 
 dotenv.config();
 
 const app = express();
 
-app.use(cors());
-app.use(express.json()); 
+// --- CORS CONFIG ---
+const allowedOrigins = [
+  'https://leo-minor-frontend.vercel.app', // production frontend
+  'http://localhost:3000',                  // local dev (adjust port if different)
+  'http://localhost:5173',                  // in case you're using Vite
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // allow requests with no origin (like curl, Postman, server-to-server)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS: ' + origin));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // explicitly handle preflight requests
+
+app.use(express.json());
 
 // Get the current directory using import.meta.url
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 
 // Middleware
 app.use(morgan('dev'));
-app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -28,7 +50,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api/users', userRoutes);
 app.use('/api/commandes', commandeRoutes);
 app.use('/api/clients', clientRoutes);
-
 
 // Create MySQL connection pool (instead of a single connection)
 export const db = mysql.createPool({
@@ -41,7 +62,7 @@ export const db = mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0,
   enableKeepAlive: true,
-  keepAliveInitialDelay: 10000
+  keepAliveInitialDelay: 10000,
 });
 
 // Garde le pool actif en évitant les connexions mortes/inactives
