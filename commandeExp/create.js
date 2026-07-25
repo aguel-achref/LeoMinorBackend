@@ -61,13 +61,14 @@ function calculerStatut(date_debut_production, date_mise_disposition) {
 }
 
 /**
- * Calcule automatiquement le nombre de jours necessaires a la production :
- * nombre_jours = qté_commandé / objectif (arrondi au jour superieur).
+ * Calcule automatiquement le nombre d'heures necessaires a la production :
+ * 1. nombre de jours = qté_commandé / objectif (arrondi au jour superieur)
+ * 2. nombre_heure = nombre de jours * heuresParJour (9h de travail par jour)
  *
  * Retourne 0 si objectif est nul, absent ou si les valeurs ne sont pas
  * des nombres valides (evite une division par zero ou un NaN).
  */
-function calculerNombreJours(qte_commande, objectif) {
+function calculerNombreHeure(qte_commande, objectif, heuresParJour = 9) {
   const qte = Number(qte_commande);
   const obj = Number(objectif);
 
@@ -75,7 +76,8 @@ function calculerNombreJours(qte_commande, objectif) {
     return 0;
   }
 
-  return Math.ceil(qte / obj);
+  const nombreJours = Math.ceil(qte / obj);
+  return nombreJours * heuresParJour;
 }
 
 /**
@@ -89,7 +91,7 @@ function calculerNombreJours(qte_commande, objectif) {
  * @param {number} [heuresParJour=8] - nombre d'heures de travail par jour
  * @returns {Promise<number>} objectif_heure calculé (arrondi à 2 décimales)
  */
-async function calculerObjectifHeure(objectif, heuresParJour = 9) {
+async function calculerObjectifHeure(objectif, heuresParJour = 8) {
   const obj = Number(objectif);
 
   if (!obj || isNaN(obj) || !heuresParJour) {
@@ -119,6 +121,7 @@ export async function createCommande(req, res) {
     ecart,
     objectif,
     qté_commandé
+    // objectif_heure retire : desormais calcule automatiquement (voir calculerObjectifHeure)
   } = req.body;
 
   const id = uuidv4();
@@ -157,8 +160,8 @@ export async function createCommande(req, res) {
     // Calcul automatique du statut a partir des dates
     const statut = calculerStatut(date_debut_production, date_mise_disposition);
 
-    // Calcul automatique du nombre de jours : qté_commandé / objectif
-    const nombre_jours = calculerNombreJours(qté_commandé, objectif);
+    // Calcul automatique du nombre d'heures : (qté_commandé / objectif) jours * 9h
+    const nombre_heure = calculerNombreHeure(qté_commandé, objectif);
 
     // Calcul automatique de l'objectif horaire via la requete SQL "obj_heure"
     const objectif_heure = await calculerObjectifHeure(objectif);
@@ -178,7 +181,7 @@ export async function createCommande(req, res) {
         date_debut_production,
         date_fin_production,
         date_mise_disposition,
-        nombre_jours,
+        nombre_heure,
         ecart,
         objectif,
         objectif_heure
@@ -196,7 +199,7 @@ export async function createCommande(req, res) {
         date_debut_production,
         date_fin_production,
         date_mise_disposition,
-        nombre_jours,
+        nombre_heure,
         ecart,
         objectif,
         objectif_heure
