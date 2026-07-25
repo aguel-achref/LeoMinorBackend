@@ -3,6 +3,7 @@ import { createClient } from '../client/create.js';
 import { deleteClient } from '../client/delete.js';
 import { getAllClients } from '../client/getAll.js';
 import { getOneClient } from '../client/getOne.js';
+import { authenticateToken } from '../utils/middlewares/auth.js';
 
 const router = express.Router(); 
 
