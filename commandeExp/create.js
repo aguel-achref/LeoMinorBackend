@@ -114,7 +114,7 @@ export async function createCommande(req, res) {
     commande,
     client,
     num_semaine,
-    description,
+    models,
     date_debut_production,
     date_fin_production,
     date_mise_disposition,
@@ -143,7 +143,7 @@ export async function createCommande(req, res) {
       !client ||
       !num_semaine ||
       !qté_commandé ||
-      !description ||
+      !models ||
       !date_debut_production ||
       !date_fin_production ||
       !date_mise_disposition ||
@@ -153,7 +153,7 @@ export async function createCommande(req, res) {
       return res.status(400).json({
         success: false,
         message:
-          'All fields are required: chaine, commande, client, num_semaine, qté_commandé, description, date_debut_production, date_fin_production, date_mise_disposition, ecart, objectif.'
+          'All fields are required: chaine, commande, client, num_semaine, qté_commandé, models, date_debut_production, date_fin_production, date_mise_disposition, ecart, objectif.'
       });
     }
 
@@ -177,7 +177,7 @@ export async function createCommande(req, res) {
         client,
         num_semaine,
         qté_commandé,
-        description,
+        models,
         date_debut_production,
         date_fin_production,
         date_mise_disposition,
@@ -195,7 +195,7 @@ export async function createCommande(req, res) {
         client,
         num_semaine,
         qté_commandé,
-        description,
+        models,
         date_debut_production,
         date_fin_production,
         date_mise_disposition,
