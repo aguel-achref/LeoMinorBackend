@@ -61,14 +61,13 @@ function calculerStatut(date_debut_production, date_mise_disposition) {
 }
 
 /**
- * Calcule automatiquement le nombre d'heures necessaires a la production :
- * 1. nombre de jours = qté_commandé / objectif (arrondi au jour superieur)
- * 2. nombre_heure = nombre de jours * heuresParJour (9h de travail par jour)
+ * Calcule le nombre de jours necessaires a la production :
+ * nombre_jours = qté_commandé / objectif (arrondi au jour superieur)
  *
  * Retourne 0 si objectif est nul, absent ou si les valeurs ne sont pas
  * des nombres valides (evite une division par zero ou un NaN).
  */
-function calculerNombreHeure(qte_commande, objectif, heuresParJour = 9) {
+function calculerNombreJours(qte_commande, objectif) {
   const qte = Number(qte_commande);
   const obj = Number(objectif);
 
@@ -76,8 +75,55 @@ function calculerNombreHeure(qte_commande, objectif, heuresParJour = 9) {
     return 0;
   }
 
-  const nombreJours = Math.ceil(qte / obj);
+  return Math.ceil(qte / obj);
+}
+
+/**
+ * Calcule automatiquement le nombre d'heures necessaires a la production :
+ * nombre_heure = nombre_jours * heuresParJour (9h de travail par jour)
+ */
+function calculerNombreHeure(qte_commande, objectif, heuresParJour = 9) {
+  const nombreJours = calculerNombreJours(qte_commande, objectif);
+
+  if (!nombreJours) {
+    return 0;
+  }
+
   return nombreJours * heuresParJour;
+}
+
+/**
+ * Calcule automatiquement date_fin_production a partir de date_debut_production
+ * en y ajoutant le nombre de jours necessaires (qté_commandé / objectif).
+ *
+ * date_fin_production = date_debut_production + nombre_jours
+ *
+ * Retourne null si date_debut_production est absente ou si le nombre de
+ * jours ne peut pas etre calcule (qté_commandé ou objectif invalides).
+ *
+ * @returns {string|null} date au format "AAAA-MM-JJ"
+ */
+function calculerDateFinProduction(date_debut_production, qte_commande, objectif) {
+  if (!date_debut_production) {
+    return null;
+  }
+
+  const nombreJours = calculerNombreJours(qte_commande, objectif);
+
+  if (!nombreJours) {
+    return null;
+  }
+
+  const debut = startOfDay(date_debut_production);
+  const fin = new Date(debut);
+  fin.setDate(fin.getDate() + nombreJours);
+
+  // Formatage en "AAAA-MM-JJ" pour l'insertion MySQL
+  const annee = fin.getFullYear();
+  const mois = String(fin.getMonth() + 1).padStart(2, '0');
+  const jour = String(fin.getDate()).padStart(2, '0');
+
+  return `${annee}-${mois}-${jour}`;
 }
 
 /**
@@ -116,12 +162,14 @@ export async function createCommande(req, res) {
     num_semaine,
     models,
     date_debut_production,
-    date_fin_production,
     date_mise_disposition,
     ecart,
     objectif,
     qté_commandé
-    // objectif_heure retire : desormais calcule automatiquement (voir calculerObjectifHeure)
+    // date_fin_production retiree des champs attendus : desormais calculee
+    // automatiquement a partir de date_debut_production + nombre de jours
+    // (voir calculerDateFinProduction). objectif_heure retire egalement
+    // (voir calculerObjectifHeure).
   } = req.body;
 
   const id = uuidv4();
@@ -136,7 +184,8 @@ export async function createCommande(req, res) {
   }
 
   try {
-    // Validate required fields (statut, nombre_jours et objectif_heure retires : calcules automatiquement)
+    // Validate required fields (statut, date_fin_production, nombre_heure
+    // et objectif_heure retires : calcules automatiquement)
     if (
       !chaine ||
       !commande ||
@@ -145,7 +194,6 @@ export async function createCommande(req, res) {
       !qté_commandé ||
       !models ||
       !date_debut_production ||
-      !date_fin_production ||
       !date_mise_disposition ||
       ecart === undefined ||
       objectif === undefined
@@ -153,7 +201,23 @@ export async function createCommande(req, res) {
       return res.status(400).json({
         success: false,
         message:
-          'All fields are required: chaine, commande, client, num_semaine, qté_commandé, models, date_debut_production, date_fin_production, date_mise_disposition, ecart, objectif.'
+          'All fields are required: chaine, commande, client, num_semaine, qté_commandé, models, date_debut_production, date_mise_disposition, ecart, objectif.'
+      });
+    }
+
+    // Calcul automatique de la date de fin de production :
+    // date_debut_production + nombre de jours (qté_commandé / objectif)
+    const date_fin_production = calculerDateFinProduction(
+      date_debut_production,
+      qté_commandé,
+      objectif
+    );
+
+    if (!date_fin_production) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Impossible de calculer la date de fin de production. Vérifiez que qté_commandé et objectif sont valides."
       });
     }
 
