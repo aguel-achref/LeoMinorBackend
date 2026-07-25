@@ -4,7 +4,6 @@ import { deleteCommande } from '../commandeExp/delete.js';
 import { updateCommande } from '../commandeExp/update.js';
 import { getOneCommande } from '../commandeExp/getOne.js';
 import { getAllCommandes } from '../commandeExp/getAll.js';
-import { reserverCar } from '../reservation/reserverCar.js';
 import { authenticateToken } from '../utils/middlewares/auth.js';
 import { searchCommande } from '../search/searchCommande.js';
 import { getAllByAdmin } from '../commandeExp/getAllByAdmin.js';
@@ -16,7 +15,6 @@ router.put('/updateCommande/:id', authenticateToken, updateCommande);
 router.delete('/deleteCommande/:id', authenticateToken, deleteCommande);
 router.get('/getOneCommande/:id', getOneCommande);
 router.get('/getAllCommandes', getAllCommandes);
-router.post('/reserver/:id', authenticateToken, reserverCar);
 router.post('/searchCommande', searchCommande);
 router.get('/getAllByAdmin', authenticateToken, getAllByAdmin);
 
