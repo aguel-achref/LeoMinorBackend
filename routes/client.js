@@ -11,7 +11,7 @@ const router = express.Router();
 router.post('/createClient', authenticateToken, createClient); 
 router.delete('/deleteClient/:id', authenticateToken, deleteClient);
 router.get('/getOneClient/:id', getOneClient);
-router.get('/getAllClient', getAllClients);
+router.get('/getAllClients', getAllClients);
 
 
 export default router; 
