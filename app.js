@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import mysql from 'mysql2'; 
 import userRoutes from './routes/authentication.js'; 
 import commandeRoutes from './routes/commande.js';
+import clientRoutes from './routes/client.js'
 import cors from "cors";
 
 dotenv.config();
@@ -26,6 +27,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Use the user routes for user-related API endpoints
 app.use('/api/users', userRoutes);
 app.use('/api/commandes', commandeRoutes);
+app.use('/api/clients', clientRoutes);
+
 
 // Create MySQL connection pool (instead of a single connection)
 export const db = mysql.createPool({
