@@ -1,5 +1,5 @@
-const ExcelJS = require('exceljs');
-const { getAllCommandes } = require('./getAll'); // adapte le chemin vers ton fichier existant
+import ExcelJS from 'exceljs';
+import { getAllCommandes } from './getAll.js'; // adapte le chemin vers ton fichier existant
 
 // Libellés des colonnes affichées dans l'Excel, dans l'ordre souhaité.
 // Chaque clé doit correspondre au nom du champ retourné par getAllCommandes.
