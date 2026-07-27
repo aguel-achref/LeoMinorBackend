@@ -36,7 +36,7 @@ function formatDate(value) {
  * GET /api/commandes/export
  * Exporte toutes les commandes dans un fichier Excel (.xlsx) mis en forme.
  */
-const exportCommandes = async (req, res) => {
+export async function exportCommandes (req, res){
   try {
     const commandes = await getAllCommandes();
 
@@ -115,6 +115,4 @@ const exportCommandes = async (req, res) => {
     console.error('Erreur export Excel:', error);
     res.status(500).json({ message: "Erreur lors de l'export Excel", error: error.message });
   }
-};
-
-module.exports = { exportCommandes };
+}
