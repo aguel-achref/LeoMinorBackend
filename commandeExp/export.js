@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { getAllCommandes } from './commandesModel.js'; // adapte le chemin vers ton fichier existant
+import { getAllCommandes } from './getAll.js'; // adapte le chemin vers ton fichier existant
 
 // Colonnes à exporter, dans l'ordre exact demandé.
 // Les dates sont déjà formatées en JJ/MM/AAAA par getAllCommandes, donc aucun
