@@ -1,8 +1,8 @@
 import ExcelJS from 'exceljs';
-import { getAllCommandes } from './getAll.js'; // adapte le chemin vers ton fichier existant
+import { getCommandesData } from './getAll.js'; // adapte le chemin vers ton fichier existant
 
 // Colonnes à exporter, dans l'ordre exact demandé.
-// Les dates sont déjà formatées en JJ/MM/AAAA par getAllCommandes, donc aucun
+// Les dates sont déjà formatées en JJ/MM/AAAA par getCommandesData, donc aucun
 // retraitement n'est nécessaire ici.
 const COLONNES = [
   { key: 'chaine', header: 'Chaîne', width: 10 },
@@ -37,7 +37,7 @@ const statutFillMap = {
  */
 export const exportCommandes = async (req, res) => {
   try {
-    const commandes = await getAllCommandes();
+    const commandes = await getCommandesData();
 
     if (!commandes || commandes.length === 0) {
       return res.status(404).json({ message: 'Aucune commande à exporter' });

@@ -100,39 +100,52 @@ function trierParDateDebutProductionAsc(commandes) {
   });
 }
 
-// Function to get all commandes
+// Logique métier pure : récupère, normalise, met à jour les statuts et trie
+// les commandes. Ne dépend pas de req/res, donc réutilisable partout
+// (route HTTP, export Excel, script CLI, etc.).
+// Retourne un tableau (vide si aucune commande) ou lève une erreur.
+export async function getCommandesData() {
+  const [commandesBrutes] = await db.promise().query('SELECT * FROM commandes');
+
+  if (commandesBrutes.length === 0) {
+    return [];
+  }
+
+  // On normalise d'abord toutes les dates au format "JJ/MM/AAAA",
+  // quel que soit le format renvoye par MySQL (objet Date, string ISO, etc.)
+  const commandes = commandesBrutes.map(normaliserDatesCommande);
+
+  // Regles de mise a jour automatique du statut :
+  // - date_mise_disposition == aujourd'hui         -> "Jour disposition"
+  // - date_mise_disposition deja passee           -> "Ferme"
+  // - date_mise_disposition dans moins de 2 jours  -> "Alerte"
+  // - date_debut_production < aujourd'hui          -> "Ouvert"
+  // - date_debut_production > aujourd'hui          -> "En attente"
+  const currentDate = new Date();
+  const SEUIL_ALERTE_JOURS = 2;
+
+  for (const commande of commandes) {
+    const nouveauStatut = calculerStatut(commande, currentDate, SEUIL_ALERTE_JOURS);
+
+    if (nouveauStatut && nouveauStatut !== commande.statut) {
+      await db.promise().query('UPDATE commandes SET statut = ? WHERE id = ?', [nouveauStatut, commande.id]);
+      commande.statut = nouveauStatut;
+    }
+  }
+
+  // Tri par date_debut_production croissante avant de renvoyer les donnees
+  return trierParDateDebutProductionAsc(commandes);
+}
+
+// Handler Express : GET /api/commandes
+// Se contente d'appeler la logique métier et de formater la réponse HTTP.
 export async function getAllCommandes(req, res) {
   try {
-    const [commandesBrutes] = await db.promise().query('SELECT * FROM commandes');
+    const commandesTriees = await getCommandesData();
 
-    if (commandesBrutes.length === 0) {
+    if (commandesTriees.length === 0) {
       return res.status(404).json({ message: 'commandes not found' });
     }
-
-    // On normalise d'abord toutes les dates au format "JJ/MM/AAAA",
-    // quel que soit le format renvoye par MySQL (objet Date, string ISO, etc.)
-    const commandes = commandesBrutes.map(normaliserDatesCommande);
-
-    // Regles de mise a jour automatique du statut :
-    // - date_mise_disposition == aujourd'hui         -> "Jour disposition"
-    // - date_mise_disposition deja passee           -> "Ferme"
-    // - date_mise_disposition dans moins de 2 jours  -> "Alerte"
-    // - date_debut_production < aujourd'hui          -> "Ouvert"
-    // - date_debut_production > aujourd'hui          -> "En attente"
-    const currentDate = new Date();
-    const SEUIL_ALERTE_JOURS = 2;
-
-    for (const commande of commandes) {
-      const nouveauStatut = calculerStatut(commande, currentDate, SEUIL_ALERTE_JOURS);
-
-      if (nouveauStatut && nouveauStatut !== commande.statut) {
-        await db.promise().query('UPDATE commandes SET statut = ? WHERE id = ?', [nouveauStatut, commande.id]);
-        commande.statut = nouveauStatut;
-      }
-    }
-
-    // Tri par date_debut_production croissante avant de renvoyer les donnees
-    const commandesTriees = trierParDateDebutProductionAsc(commandes);
 
     return res.status(200).json({
       success: true,
