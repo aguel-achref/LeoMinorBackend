@@ -38,10 +38,30 @@ export async function createClient(req, res) {
 
   try {
     // Validate required fields
-    if (!nom) {
+    if (!nom || !nom.trim()) {
       return res.status(400).json({
         success: false,
         message: 'All fields are required: nom.'
+      });
+    }
+
+    // Le nom du client est toujours stocké en majuscules, et on retire
+    // les espaces superflus au debut/fin pour eviter les doublons du type
+    // "Client A" / " client a ".
+    const nomMajuscule = nom.trim().toUpperCase();
+
+    // Verification qu'un client avec ce nom n'existe pas deja (insensible a
+    // la casse, au cas ou d'anciens clients auraient ete crees avant ce
+    // changement et ne soient pas encore en majuscules).
+    const [existingClients] = await db.promise().query(
+      'SELECT id FROM clients WHERE UPPER(nom) = ?',
+      [nomMajuscule]
+    );
+
+    if (existingClients.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: `Un client avec le nom "${nomMajuscule}" existe déjà.`
       });
     }
 
@@ -52,7 +72,7 @@ export async function createClient(req, res) {
     // Insert the client
     const [result] = await db.promise().query(
       `INSERT INTO clients (id, user_id, nom, models) VALUES (?, ?, ?, ?)`,
-      [id, userId, nom, JSON.stringify(modelsArray)]
+      [id, userId, nomMajuscule, JSON.stringify(modelsArray)]
     );
 
     if (result.affectedRows === 0) {
