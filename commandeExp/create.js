@@ -94,9 +94,14 @@ function calculerNombreHeure(qte_commande, objectif, heuresParJour = 9) {
 
 /**
  * Calcule automatiquement date_fin_production a partir de date_debut_production
- * en y ajoutant le nombre de jours necessaires (qté_commandé / objectif).
+ * en comptant nombre_jours jours de production (le jour de debut compte comme
+ * le 1er jour), en excluant les dimanches du calendrier de production.
  *
- * date_fin_production = date_debut_production + nombre_jours
+ * Exemple : qté_commandé = 100, objectif = 100 -> nombre_jours = 1
+ * -> date_fin_production = date_debut_production (meme jour).
+ *
+ * Si un dimanche est rencontre pendant le comptage, il est ignore (ne compte
+ * pas comme jour de production) et on passe au jour suivant.
  *
  * Retourne null si date_debut_production est absente ou si le nombre de
  * jours ne peut pas etre calcule (qté_commandé ou objectif invalides).
@@ -114,14 +119,22 @@ function calculerDateFinProduction(date_debut_production, qte_commande, objectif
     return null;
   }
 
-  const debut = startOfDay(date_debut_production);
-  const fin = new Date(debut);
-  fin.setDate(fin.getDate() + nombreJours);
+  const current = startOfDay(date_debut_production);
+  let joursComptes = 0;
+
+  // 0 = dimanche (getDay() de Date JS)
+  while (true) {
+    if (current.getDay() !== 0) {
+      joursComptes++;
+      if (joursComptes === nombreJours) break;
+    }
+    current.setDate(current.getDate() + 1);
+  }
 
   // Formatage en "AAAA-MM-JJ" pour l'insertion MySQL
-  const annee = fin.getFullYear();
-  const mois = String(fin.getMonth() + 1).padStart(2, '0');
-  const jour = String(fin.getDate()).padStart(2, '0');
+  const annee = current.getFullYear();
+  const mois = String(current.getMonth() + 1).padStart(2, '0');
+  const jour = String(current.getDate()).padStart(2, '0');
 
   return `${annee}-${mois}-${jour}`;
 }
@@ -206,7 +219,8 @@ export async function createCommande(req, res) {
     }
 
     // Calcul automatique de la date de fin de production :
-    // date_debut_production + nombre de jours (qté_commandé / objectif)
+    // date_debut_production + nombre de jours (qté_commandé / objectif),
+    // dimanches exclus du comptage
     const date_fin_production = calculerDateFinProduction(
       date_debut_production,
       qté_commandé,
