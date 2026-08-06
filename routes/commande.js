@@ -8,6 +8,8 @@ import { authenticateToken } from '../utils/middlewares/auth.js';
 import { searchCommande } from '../search/searchCommande.js';
 import { getAllByAdmin } from '../commandeExp/getAllByAdmin.js';
 import { exportCommandes } from '../commandeExp/export.js';
+import { importCommandes } from '../commandeExp/import.js';
+
 const router = express.Router(); 
 
 // Define the routes
@@ -19,6 +21,8 @@ router.get('/getAllCommandes', getAllCommandes);
 router.post('/searchCommande', searchCommande);
 router.get('/getAllByAdmin', authenticateToken, getAllByAdmin);
 router.get('/exportCommandes', authenticateToken, exportCommandes);
+router.get('/importCommandes', authenticateToken, importCommandes);
+
 
 
 
