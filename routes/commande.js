@@ -1,4 +1,5 @@
-import express from 'express'; 
+import express from 'express';
+import multer from 'multer';
 import { createCommande } from '../commandeExp/create.js';
 import { deleteCommande } from '../commandeExp/delete.js';
 import { updateCommande } from '../commandeExp/update.js';
@@ -10,11 +11,16 @@ import { getAllByAdmin } from '../commandeExp/getAllByAdmin.js';
 import { exportCommandes } from '../commandeExp/export.js';
 import { importCommandes } from '../commandeExp/import.js';
 
-const router = express.Router(); 
+const router = express.Router();
+
+// Stockage en mémoire (req.file.buffer) : importCommandes lit le fichier
+// Excel directement depuis le buffer avec ExcelJS, pas besoin de l'écrire
+// sur le disque.
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Define the routes
-router.post('/createCommande', authenticateToken, createCommande); 
-router.put('/updateCommande/:id', authenticateToken, updateCommande); 
+router.post('/createCommande', authenticateToken, createCommande);
+router.put('/updateCommande/:id', authenticateToken, updateCommande);
 router.delete('/deleteCommande/:id', authenticateToken, deleteCommande);
 router.get('/getOneCommande/:id', getOneCommande);
 router.get('/getAllCommandes', getAllCommandes);
@@ -23,7 +29,4 @@ router.get('/getAllByAdmin', authenticateToken, getAllByAdmin);
 router.get('/exportCommandes', authenticateToken, exportCommandes);
 router.post('/importCommandes', authenticateToken, upload.single('file'), importCommandes);
 
-
-
-
-export default router; 
+export default router;
