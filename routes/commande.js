@@ -21,7 +21,7 @@ router.get('/getAllCommandes', getAllCommandes);
 router.post('/searchCommande', searchCommande);
 router.get('/getAllByAdmin', authenticateToken, getAllByAdmin);
 router.get('/exportCommandes', authenticateToken, exportCommandes);
-router.get('/importCommandes', authenticateToken, importCommandes);
+router.post('/importCommandes', authenticateToken, importCommandes);
 
 
 
