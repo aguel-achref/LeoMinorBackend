@@ -21,7 +21,7 @@ router.get('/getAllCommandes', getAllCommandes);
 router.post('/searchCommande', searchCommande);
 router.get('/getAllByAdmin', authenticateToken, getAllByAdmin);
 router.get('/exportCommandes', authenticateToken, exportCommandes);
-router.post('/importCommandes', authMiddleware, upload.single('file'), importCommandes);
+router.post('/importCommandes', authenticateToken, upload.single('file'), importCommandes);
 
 
 
