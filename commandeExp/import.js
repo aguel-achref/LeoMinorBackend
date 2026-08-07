@@ -134,6 +134,12 @@ export async function importCommandes(req, res) {
     return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
+  // --- DEBUG TEMPORAIRE : à retirer une fois le problème résolu ---
+  console.log('DEBUG import - Content-Type reçu:', req.headers['content-type']);
+  console.log('DEBUG import - req.file:', req.file);
+  console.log('DEBUG import - req.body:', req.body);
+  // -----------------------------------------------------------------
+
   if (!req.file) {
     return res.status(400).json({
       success: false,
