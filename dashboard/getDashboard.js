@@ -1,9 +1,9 @@
 import { db } from '../app.js';
-import { getCommandesData } from '../commandeExp/getAll.js'; // adapte le chemin si besoin
+import { getCommandesData } from '../commandeExp/getAll.js';
 
 /**
- * Regroupe un tableau de commandes par une clé donnée (ex: "client", "statut", "chaine")
- * et retourne un tableau [{ label, count }] trié par count décroissant.
+ * Regroupe un tableau de commandes par une clé donnée et retourne
+ * un tableau [{ label, count }] trié par count décroissant.
  */
 function grouperEtCompter(commandes, cle) {
   const compteurs = {};
@@ -19,15 +19,33 @@ function grouperEtCompter(commandes, cle) {
 }
 
 /**
+ * Regroupe un tableau de commandes par une clé donnée et SOMME un champ
+ * numérique (ex: nombre_heure) au lieu de compter les occurrences.
+ * Retourne [{ label, total }] trié par total décroissant.
+ *
+ * Note : nombre_heure est stocké en string en base (vu dans la réponse API),
+ * donc on force la conversion en Number avant de sommer.
+ */
+function grouperEtSommer(commandes, cleGroupe, champNumerique) {
+  const totaux = {};
+
+  for (const commande of commandes) {
+    const valeur = commande[cleGroupe] || 'Non défini';
+    const nombre = Number(commande[champNumerique]) || 0;
+    totaux[valeur] = (totaux[valeur] || 0) + nombre;
+  }
+
+  return Object.entries(totaux)
+    .map(([label, total]) => ({ label, total }))
+    .sort((a, b) => b.total - a.total);
+}
+
+/**
  * GET /api/dashboard/summary
- * Retourne les statistiques globales pour le dashboard :
- * - totaux (commandes, clients)
- * - répartition par statut / par client / par chaîne
- * - commandes à surveiller (Alerte, Jour disposition)
+ * Retourne les statistiques globales pour le dashboard.
  */
 export async function getDashboardSummary(req, res) {
   try {
-    // Réutilise la logique métier existante -> statuts toujours à jour
     const commandes = await getCommandesData();
 
     const [clientsRows] = await db
@@ -37,6 +55,9 @@ export async function getDashboardSummary(req, res) {
     const commandesParStatut = grouperEtCompter(commandes, 'statut');
     const commandesParClient = grouperEtCompter(commandes, 'client');
     const commandesParChaine = grouperEtCompter(commandes, 'chaine');
+
+    // Total d'heures de production nécessaires, regroupé par client
+    const heuresParClient = grouperEtSommer(commandes, 'client', 'nombre_heure');
 
     const commandesAlerte = commandes.filter((c) =>
       ['Alerte', 'Jour disposition'].includes(c.statut)
@@ -52,6 +73,7 @@ export async function getDashboardSummary(req, res) {
         commandesParStatut,
         commandesParClient,
         commandesParChaine,
+        heuresParClient,
         commandesAlerte,
       },
     });
