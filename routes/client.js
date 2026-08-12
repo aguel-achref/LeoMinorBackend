@@ -3,6 +3,7 @@ import { createClient } from '../client/create.js';
 import { deleteClient } from '../client/delete.js';
 import { getAllClients } from '../client/getAll.js';
 import { getOneClient } from '../client/getOne.js';
+import { updateClient } from '../client/update.js';
 import { authenticateToken } from '../utils/middlewares/auth.js';
 
 const router = express.Router(); 
@@ -12,6 +13,7 @@ router.post('/createClient', authenticateToken, createClient);
 router.delete('/deleteClient/:id', authenticateToken, deleteClient);
 router.get('/getOneClient/:id', getOneClient);
 router.get('/getAllClients',authenticateToken, getAllClients);
+router.get('/updateClient',authenticateToken, updateClient);
 
 
 export default router; 
