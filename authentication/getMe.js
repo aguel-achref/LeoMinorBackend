@@ -14,7 +14,7 @@ export async function getMe(req, res) {
     const [rows] = await db
       .promise()
       .query(
-        'SELECT id, first_name, last_name, email FROM users WHERE id = ?',
+        'SELECT id, first_name, last_name, email, status FROM users WHERE id = ?',
         [userId]
       );
 
