@@ -13,7 +13,7 @@ router.post('/createClient', authenticateToken, createClient);
 router.delete('/deleteClient/:id', authenticateToken, deleteClient);
 router.get('/getOneClient/:id', getOneClient);
 router.get('/getAllClients',authenticateToken, getAllClients);
-router.get('/updateClient',authenticateToken, updateClient);
+router.put('/updateClient/:id',authenticateToken, updateClient);
 
 
 export default router; 
