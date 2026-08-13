@@ -52,11 +52,11 @@ export async function createUser(req, res) {
       });
     }
 
-    const validStatuses = ["ADMIN", "CLIENT"];
+    const validStatuses = ["ADMIN", "USER"];
     const userStatus =
       status && validStatuses.includes(status.toUpperCase())
         ? status.toUpperCase()
-        : "CLIENT";
+        : "USER";
 
     // Check if email already exists
     const [existingUser] = await db
