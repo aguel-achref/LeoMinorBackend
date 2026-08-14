@@ -64,10 +64,9 @@ function parseDateFlexible(value) {
 
   const slashMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (slashMatch) {
-    let [, a, b, y] = slashMatch.map(Number) ? slashMatch : slashMatch;
-    a = Number(slashMatch[1]);
-    b = Number(slashMatch[2]);
-    y = Number(slashMatch[3]);
+    const a = Number(slashMatch[1]);
+    const b = Number(slashMatch[2]);
+    const y = Number(slashMatch[3]);
 
     let day, month;
     if (a > 12) {
@@ -114,14 +113,32 @@ function formatDateAffichage(date) {
 }
 
 /**
+ * Construit une map { chaine: objectif_heure } à partir des commandes.
+ * objectif_heure étant censé représenter une capacité fixe de la chaîne,
+ * on garde la dernière valeur non nulle rencontrée pour chaque chaîne.
+ */
+function buildObjectifParChaine(commandes, champObjectif) {
+  const map = {};
+  for (const commande of commandes) {
+    const chaine = commande.chaine || 'Non défini';
+    const valeur = Number(commande[champObjectif]);
+    if (!isNaN(valeur) && valeur > 0) {
+      map[chaine] = valeur;
+    }
+  }
+  return map;
+}
+
+/**
  * nombre_heure représente la charge PAR JOUR d'une commande (pas un total à
  * répartir). Une commande "occupe" sa chaîne à raison de nombre_heure chaque
  * jour de date_debut_production à date_fin_production (bornes incluses).
  *
  * Calcule, pour un jour précis (ex: aujourd'hui), la somme des heures de
- * toutes les commandes en cours ce jour-là, groupée par chaîne.
+ * toutes les commandes en cours ce jour-là, groupée par chaîne, enrichie
+ * avec l'objectif de la chaîne et le pourcentage de charge.
  */
-function heuresParChainePourJour(commandes, champNumerique, jourCible) {
+function heuresParChainePourJour(commandes, champNumerique, jourCible, objectifParChaine) {
   const totaux = {};
 
   for (const commande of commandes) {
@@ -140,7 +157,12 @@ function heuresParChainePourJour(commandes, champNumerique, jourCible) {
   }
 
   return Object.entries(totaux)
-    .map(([label, total]) => ({ label, total: Math.round(total * 100) / 100 }))
+    .map(([label, total]) => {
+      const objectif = objectifParChaine[label] || null;
+      const totalArrondi = Math.round(total * 100) / 100;
+      const pourcentage = objectif ? Math.round((totalArrondi / objectif) * 100) : null;
+      return { label, total: totalArrondi, objectif, pourcentage };
+    })
     .sort((a, b) => b.total - a.total);
 }
 
@@ -202,14 +224,18 @@ export async function getDashboardSummary(req, res) {
     const weekStart = getStartOfWeek(today);
     const weekEnd = addDays(weekStart, 6);
 
-    // Charge par chaîne, uniquement pour aujourd'hui
+    // Capacité (objectif_heure) par chaîne, dérivée des commandes
+    const objectifParChaine = buildObjectifParChaine(commandes, 'objectif_heure');
+
+    // Charge par chaîne pour aujourd'hui, avec objectif + pourcentage (pour les jauges)
     const heuresParChaineAujourdhui = heuresParChainePourJour(
       commandes,
       'nombre_heure',
-      today
+      today,
+      objectifParChaine
     );
 
-    // Charge par chaîne, uniquement pour la semaine en cours
+    // Charge par chaîne pour la semaine en cours (pas d'objectif ici, demande explicite)
     const heuresParChaineSemaine = heuresParChainePourSemaine(
       commandes,
       'nombre_heure',
