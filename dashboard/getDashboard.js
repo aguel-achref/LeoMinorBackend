@@ -4,13 +4,21 @@ import { getCommandesData } from '../commandeExp/getAll.js';
 const HEURES_JOUR_NORMAL = 8;
 const HEURES_SAMEDI = 5;
 const SAMEDI = 6; // Date.getDay() : 0 = dimanche, 6 = samedi
+const DIMANCHE = 0;
 
 /**
  * Taux d'heures théorique pour un jour donné (avant application du "reste"
- * du dernier jour) : 5h le samedi, 8h les autres jours.
+ * du dernier jour ouvré) : 0h le dimanche (chômé), 5h le samedi, 8h les autres jours.
  */
 function tauxJournalier(date) {
-  return date.getDay() === SAMEDI ? HEURES_SAMEDI : HEURES_JOUR_NORMAL;
+  const jourSemaine = date.getDay();
+  if (jourSemaine === DIMANCHE) return 0;
+  if (jourSemaine === SAMEDI) return HEURES_SAMEDI;
+  return HEURES_JOUR_NORMAL;
+}
+
+function estJourTravaille(date) {
+  return date.getDay() !== DIMANCHE;
 }
 
 /**
@@ -105,10 +113,6 @@ function addDays(date, n) {
   return d;
 }
 
-function diffEnJours(dateA, dateB) {
-  return Math.round((dateB - dateA) / 86400000);
-}
-
 /**
  * Retourne le lundi (00:00) de la semaine contenant `date`.
  */
@@ -146,8 +150,21 @@ function buildObjectifParChaine(commandes, champObjectif) {
 }
 
 /**
- * Somme des taux journaliers théoriques (8h / 5h le samedi) sur une plage
- * de jours [debut, fin] incluse. Retourne 0 si debut > fin.
+ * Retourne le dernier jour OUVRÉ (pas dimanche) compris entre debut et fin
+ * (bornes incluses), en remontant depuis fin si besoin. Retourne null s'il
+ * n'existe aucun jour ouvré dans cet intervalle (ex: période d'un seul jour
+ * qui tombe un dimanche).
+ */
+function dernierJourTravaille(debut, fin) {
+  for (let jour = new Date(fin); jour >= debut; jour = addDays(jour, -1)) {
+    if (estJourTravaille(jour)) return jour;
+  }
+  return null;
+}
+
+/**
+ * Somme des taux journaliers théoriques (0h dimanche / 5h samedi / 8h sinon)
+ * sur une plage de jours [debut, fin] incluse. Retourne 0 si debut > fin.
  */
 function sommeTauxJournaliers(debut, fin) {
   if (debut > fin) return 0;
@@ -161,16 +178,16 @@ function sommeTauxJournaliers(debut, fin) {
 /**
  * Pour une commande donnée, calcule combien d'heures elle occupe sa chaîne
  * un jour précis de sa période de production :
- * - taux théorique du jour (8h, ou 5h si samedi) pour chaque jour actif,
- * - SAUF le dernier jour de la période, qui prend le reste
- *   (nombre_heure - somme des taux théoriques de tous les jours précédents),
+ * - 0h si le jour cible est un dimanche (chômé) ou hors période,
+ * - taux théorique du jour (8h, ou 5h le samedi) pour chaque jour ouvré actif,
+ * - SAUF le dernier jour OUVRÉ de la période, qui prend le reste
+ *   (nombre_heure - somme des taux théoriques de tous les jours ouvrés précédents),
  *   résultat borné à 0 minimum en cas de données incohérentes.
- *
- * Retourne 0 si le jour n'est pas dans la période de la commande.
  */
 function heuresCommandePourJour(commande, jourCible, champNumerique) {
   const nombreHeureTotal = Number(commande[champNumerique]) || 0;
   if (nombreHeureTotal <= 0) return 0;
+  if (!estJourTravaille(jourCible)) return 0; // dimanche : jamais de charge
 
   const debut = parseDateFlexible(commande.date_debut_production);
   let fin = parseDateFlexible(commande.date_fin_production);
@@ -179,13 +196,16 @@ function heuresCommandePourJour(commande, jourCible, champNumerique) {
 
   if (jourCible < debut || jourCible > fin) return 0;
 
-  const estDernierJour = diffEnJours(jourCible, fin) === 0;
+  const dernierOuvre = dernierJourTravaille(debut, fin);
+  if (!dernierOuvre) return 0; // aucun jour ouvré dans toute la période
 
-  if (!estDernierJour) {
+  const estDernierJourOuvre = jourCible.getTime() === dernierOuvre.getTime();
+
+  if (!estDernierJourOuvre) {
     return tauxJournalier(jourCible);
   }
 
-  const avantDernier = addDays(fin, -1);
+  const avantDernier = addDays(dernierOuvre, -1);
   const sommeJoursPrecedents = sommeTauxJournaliers(debut, avantDernier);
   const reste = nombreHeureTotal - sommeJoursPrecedents;
   return Math.max(0, reste);
@@ -220,9 +240,9 @@ function heuresParChainePourJour(commandes, champNumerique, jourCible, objectifP
 /**
  * Calcule, pour une semaine précise (semaineDebut -> semaineFin, bornes
  * incluses), la somme des heures de chaque chaîne, en additionnant, pour
- * chaque commande, la contribution jour par jour (taux journalier, reste sur
- * le dernier jour de la PÉRIODE DE LA COMMANDE — pas de la semaine) sur les
- * seuls jours qui tombent dans la semaine.
+ * chaque commande, la contribution jour par jour (dimanche exclu, reste sur
+ * le dernier jour OUVRÉ de la PÉRIODE DE LA COMMANDE — pas de la semaine)
+ * sur les seuls jours qui tombent dans la semaine.
  */
 function heuresParChainePourSemaine(commandes, champNumerique, semaineDebut, semaineFin) {
   const totaux = {};
@@ -278,7 +298,7 @@ export async function getDashboardSummary(req, res) {
     // Capacité (objectif_heure) par chaîne, dérivée des commandes
     const objectifParChaine = buildObjectifParChaine(commandes, 'objectif_heure');
 
-    // Charge par chaîne pour aujourd'hui (8h/jour, 5h le samedi, reste sur le dernier jour)
+    // Charge par chaîne pour aujourd'hui (8h/jour, 5h samedi, 0h dimanche, reste sur le dernier jour ouvré)
     const heuresParChaineAujourdhui = heuresParChainePourJour(
       commandes,
       'nombre_heure',
