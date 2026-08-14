@@ -125,6 +125,19 @@ function getStartOfWeek(date) {
   return d;
 }
 
+/**
+ * Calcule le label de semaine ISO 8601 ("Sww") pour une date donnée,
+ * ex: "S33".
+ */
+function getISOWeekLabel(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return `S${String(weekNum).padStart(2, '0')}`;
+}
+
 function formatDateAffichage(date) {
   const d = String(date.getDate()).padStart(2, '0');
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -332,7 +345,7 @@ export async function getDashboardSummary(req, res) {
         heuresParChaineAujourdhui,
         heuresParChaineSemaine,
         dateAujourdhuiLabel: formatDateAffichage(today),
-        semaineLabel: `${formatDateAffichage(weekStart)} - ${formatDateAffichage(weekEnd)}`,
+        semaineLabel: getISOWeekLabel(today),
         commandesAlerte,
       },
     });
