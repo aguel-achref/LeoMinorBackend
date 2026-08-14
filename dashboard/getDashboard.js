@@ -22,9 +22,6 @@ function grouperEtCompter(commandes, cle) {
  * Regroupe un tableau de commandes par une clé donnée et SOMME un champ
  * numérique (ex: nombre_heure) au lieu de compter les occurrences.
  * Retourne [{ label, total }] trié par total décroissant.
- *
- * Note : nombre_heure est stocké en string en base (vu dans la réponse API),
- * donc on force la conversion en Number avant de sommer.
  */
 function grouperEtSommer(commandes, cleGroupe, champNumerique) {
   const totaux = {};
@@ -41,52 +38,117 @@ function grouperEtSommer(commandes, cleGroupe, champNumerique) {
 }
 
 /**
- * Formate une date en "YYYY-MM-DD" pour servir de clé de regroupement journalier.
+ * Construit un Date à minuit local à partir d'une valeur de date quelconque
+ * (string SQL, Date, timestamp). Retourne null si invalide.
  */
-function formatDateJour(dateValue) {
-  if (!dateValue) return 'Non défini';
+function parseDateLocal(dateValue) {
+  if (!dateValue) return null;
   const d = new Date(dateValue);
-  if (isNaN(d.getTime())) return 'Non défini';
-  return d.toISOString().slice(0, 10);
+  if (isNaN(d.getTime())) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function addDays(date, n) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
 }
 
 /**
- * Regroupe un tableau de commandes par DEUX clés (ex: chaîne + jour/semaine)
- * et SOMME un champ numérique. Retourne une structure prête pour un graphique
- * multi-séries :
- * {
- *   labels: [périodes triées],
- *   chaines: [noms des chaînes],
- *   series: [{ chaine, data: [totaux alignés sur labels] }]
- * }
+ * Formate un Date en "YYYY-MM-DD" en utilisant les composants locaux
+ * (évite les décalages de fuseau horaire liés à toISOString()).
  */
-function grouperEtSommerParChaineEtPeriode(commandes, champPeriode, champNumerique) {
-  const parPeriodeEtChaine = {}; // { periode: { chaine: total } }
+function formatDateJour(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Calcule le label de semaine ISO 8601 ("YYYY-Www") pour une date donnée.
+ */
+function getISOWeekLabel(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-S${String(weekNum).padStart(2, '0')}`;
+}
+
+/**
+ * Répartit les heures de chaque commande sur les jours réels de sa période
+ * de production (date_debut_production -> date_fin_production, bornes incluses),
+ * puis regroupe le résultat par chaîne et par jour, ET par chaîne et par semaine
+ * ISO (dérivée du même découpage jour par jour, donc cohérente entre les deux vues).
+ *
+ * Seuls les jours compris dans la fenêtre [aujourd'hui - pastDays, aujourd'hui + futureDays]
+ * sont conservés, pour éviter un graphique surchargé.
+ *
+ * @returns {{ parJour: {labels, chaines, series}, parSemaine: {labels, chaines, series} }}
+ */
+function repartirHeuresParChaine(commandes, champNumerique, pastDays = 3, futureDays = 30) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const windowStart = addDays(today, -pastDays);
+  const windowEnd = addDays(today, futureDays);
+
+  const parJour = {}; // { 'YYYY-MM-DD': { chaine: heures } }
+  const parSemaine = {}; // { 'YYYY-Sww': { chaine: heures } }
   const chainesSet = new Set();
-  const periodesSet = new Set();
 
   for (const commande of commandes) {
-    const periode = commande[champPeriode] || 'Non défini';
     const chaine = commande.chaine || 'Non défini';
-    const nombre = Number(commande[champNumerique]) || 0;
+    const totalHeures = Number(commande[champNumerique]) || 0;
+    if (totalHeures <= 0) continue;
 
-    periodesSet.add(periode);
+    const debut = parseDateLocal(commande.date_debut_production);
+    let fin = parseDateLocal(commande.date_fin_production);
+
+    if (!debut) continue; // pas de date de début exploitable, on ignore cette commande
+    if (!fin || fin < debut) fin = debut; // sécurité si fin manquante/incohérente
+
+    // Liste des jours de la commande (bornes incluses)
+    const joursCommande = [];
+    for (let d = new Date(debut); d <= fin; d = addDays(d, 1)) {
+      joursCommande.push(new Date(d));
+    }
+    if (joursCommande.length === 0) continue;
+
+    const heuresParJourCommande = totalHeures / joursCommande.length;
     chainesSet.add(chaine);
 
-    if (!parPeriodeEtChaine[periode]) parPeriodeEtChaine[periode] = {};
-    parPeriodeEtChaine[periode][chaine] =
-      (parPeriodeEtChaine[periode][chaine] || 0) + nombre;
+    for (const jour of joursCommande) {
+      if (jour < windowStart || jour > windowEnd) continue; // hors fenêtre affichée
+
+      const jourLabel = formatDateJour(jour);
+      const semaineLabel = getISOWeekLabel(jour);
+
+      if (!parJour[jourLabel]) parJour[jourLabel] = {};
+      parJour[jourLabel][chaine] = (parJour[jourLabel][chaine] || 0) + heuresParJourCommande;
+
+      if (!parSemaine[semaineLabel]) parSemaine[semaineLabel] = {};
+      parSemaine[semaineLabel][chaine] =
+        (parSemaine[semaineLabel][chaine] || 0) + heuresParJourCommande;
+    }
   }
 
-  const labels = Array.from(periodesSet).sort();
   const chaines = Array.from(chainesSet).sort();
 
-  const series = chaines.map((chaine) => ({
-    chaine,
-    data: labels.map((periode) => parPeriodeEtChaine[periode]?.[chaine] || 0),
-  }));
+  function buildStructure(map) {
+    const labels = Object.keys(map).sort();
+    const series = chaines.map((chaine) => ({
+      chaine,
+      data: labels.map((label) => Math.round((map[label]?.[chaine] || 0) * 100) / 100),
+    }));
+    return { labels, chaines, series };
+  }
 
-  return { labels, chaines, series };
+  return {
+    parJour: buildStructure(parJour),
+    parSemaine: buildStructure(parSemaine),
+  };
 }
 
 /**
@@ -108,23 +170,10 @@ export async function getDashboardSummary(req, res) {
     // Total d'heures de production nécessaires, regroupé par client
     const heuresParClient = grouperEtSommer(commandes, 'client', 'nombre_heure');
 
-    // Heures par chaîne, regroupées par jour (date_production)
-    const commandesAvecJour = commandes.map((c) => ({
-      ...c,
-      jour: formatDateJour(c.date_production),
-    }));
-    const heuresParChaineParJour = grouperEtSommerParChaineEtPeriode(
-      commandesAvecJour,
-      'jour',
-      'nombre_heure'
-    );
-
-    // Heures par chaîne, regroupées par semaine (num_semaine déjà calculé)
-    const heuresParChaineParSemaine = grouperEtSommerParChaineEtPeriode(
-      commandes,
-      'num_semaine',
-      'nombre_heure'
-    );
+    // Heures par chaîne réparties sur les jours réels de production
+    // (date_debut_production -> date_fin_production), vue jour + vue semaine
+    const { parJour: heuresParChaineParJour, parSemaine: heuresParChaineParSemaine } =
+      repartirHeuresParChaine(commandes, 'nombre_heure', 3, 30);
 
     const commandesAlerte = commandes.filter((c) =>
       ['Alerte', 'Jour disposition'].includes(c.statut)
