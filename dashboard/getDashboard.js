@@ -1,6 +1,18 @@
 import { db } from '../app.js';
 import { getCommandesData } from '../commandeExp/getAll.js';
 
+const HEURES_JOUR_NORMAL = 8;
+const HEURES_SAMEDI = 5;
+const SAMEDI = 6; // Date.getDay() : 0 = dimanche, 6 = samedi
+
+/**
+ * Taux d'heures théorique pour un jour donné (avant application du "reste"
+ * du dernier jour) : 5h le samedi, 8h les autres jours.
+ */
+function tauxJournalier(date) {
+  return date.getDay() === SAMEDI ? HEURES_SAMEDI : HEURES_JOUR_NORMAL;
+}
+
 /**
  * Regroupe un tableau de commandes par une clé donnée et retourne
  * un tableau [{ label, count }] trié par count décroissant.
@@ -93,6 +105,10 @@ function addDays(date, n) {
   return d;
 }
 
+function diffEnJours(dateA, dateB) {
+  return Math.round((dateB - dateA) / 86400000);
+}
+
 /**
  * Retourne le lundi (00:00) de la semaine contenant `date`.
  */
@@ -130,10 +146,52 @@ function buildObjectifParChaine(commandes, champObjectif) {
 }
 
 /**
- * nombre_heure représente la charge PAR JOUR d'une commande (pas un total à
- * répartir). Une commande "occupe" sa chaîne à raison de nombre_heure chaque
- * jour de date_debut_production à date_fin_production (bornes incluses).
+ * Somme des taux journaliers théoriques (8h / 5h le samedi) sur une plage
+ * de jours [debut, fin] incluse. Retourne 0 si debut > fin.
+ */
+function sommeTauxJournaliers(debut, fin) {
+  if (debut > fin) return 0;
+  let total = 0;
+  for (let jour = new Date(debut); jour <= fin; jour = addDays(jour, 1)) {
+    total += tauxJournalier(jour);
+  }
+  return total;
+}
+
+/**
+ * Pour une commande donnée, calcule combien d'heures elle occupe sa chaîne
+ * un jour précis de sa période de production :
+ * - taux théorique du jour (8h, ou 5h si samedi) pour chaque jour actif,
+ * - SAUF le dernier jour de la période, qui prend le reste
+ *   (nombre_heure - somme des taux théoriques de tous les jours précédents),
+ *   résultat borné à 0 minimum en cas de données incohérentes.
  *
+ * Retourne 0 si le jour n'est pas dans la période de la commande.
+ */
+function heuresCommandePourJour(commande, jourCible, champNumerique) {
+  const nombreHeureTotal = Number(commande[champNumerique]) || 0;
+  if (nombreHeureTotal <= 0) return 0;
+
+  const debut = parseDateFlexible(commande.date_debut_production);
+  let fin = parseDateFlexible(commande.date_fin_production);
+  if (!debut) return 0;
+  if (!fin || fin < debut) fin = debut;
+
+  if (jourCible < debut || jourCible > fin) return 0;
+
+  const estDernierJour = diffEnJours(jourCible, fin) === 0;
+
+  if (!estDernierJour) {
+    return tauxJournalier(jourCible);
+  }
+
+  const avantDernier = addDays(fin, -1);
+  const sommeJoursPrecedents = sommeTauxJournaliers(debut, avantDernier);
+  const reste = nombreHeureTotal - sommeJoursPrecedents;
+  return Math.max(0, reste);
+}
+
+/**
  * Calcule, pour un jour précis (ex: aujourd'hui), la somme des heures de
  * toutes les commandes en cours ce jour-là, groupée par chaîne, enrichie
  * avec l'objectif de la chaîne et le pourcentage de charge.
@@ -142,18 +200,11 @@ function heuresParChainePourJour(commandes, champNumerique, jourCible, objectifP
   const totaux = {};
 
   for (const commande of commandes) {
+    const heures = heuresCommandePourJour(commande, jourCible, champNumerique);
+    if (heures <= 0) continue;
+
     const chaine = commande.chaine || 'Non défini';
-    const heuresParJour = Number(commande[champNumerique]) || 0;
-    if (heuresParJour <= 0) continue;
-
-    const debut = parseDateFlexible(commande.date_debut_production);
-    let fin = parseDateFlexible(commande.date_fin_production);
-    if (!debut) continue;
-    if (!fin || fin < debut) fin = debut;
-
-    if (jourCible >= debut && jourCible <= fin) {
-      totaux[chaine] = (totaux[chaine] || 0) + heuresParJour;
-    }
+    totaux[chaine] = (totaux[chaine] || 0) + heures;
   }
 
   return Object.entries(totaux)
@@ -168,18 +219,15 @@ function heuresParChainePourJour(commandes, champNumerique, jourCible, objectifP
 
 /**
  * Calcule, pour une semaine précise (semaineDebut -> semaineFin, bornes
- * incluses), la somme des heures de chaque chaîne : pour chaque commande,
- * on compte le nombre de jours de la semaine réellement couverts par sa
- * période de production, multiplié par ses heures/jour.
+ * incluses), la somme des heures de chaque chaîne, en additionnant, pour
+ * chaque commande, la contribution jour par jour (taux journalier, reste sur
+ * le dernier jour de la PÉRIODE DE LA COMMANDE — pas de la semaine) sur les
+ * seuls jours qui tombent dans la semaine.
  */
 function heuresParChainePourSemaine(commandes, champNumerique, semaineDebut, semaineFin) {
   const totaux = {};
 
   for (const commande of commandes) {
-    const chaine = commande.chaine || 'Non défini';
-    const heuresParJour = Number(commande[champNumerique]) || 0;
-    if (heuresParJour <= 0) continue;
-
     const debut = parseDateFlexible(commande.date_debut_production);
     let fin = parseDateFlexible(commande.date_fin_production);
     if (!debut) continue;
@@ -189,10 +237,13 @@ function heuresParChainePourSemaine(commandes, champNumerique, semaineDebut, sem
     const chevaucheFin = fin < semaineFin ? fin : semaineFin;
     if (chevaucheDebut > chevaucheFin) continue; // pas de chevauchement avec la semaine
 
-    const joursChevauchement =
-      Math.round((chevaucheFin - chevaucheDebut) / 86400000) + 1;
+    const chaine = commande.chaine || 'Non défini';
 
-    totaux[chaine] = (totaux[chaine] || 0) + heuresParJour * joursChevauchement;
+    for (let jour = new Date(chevaucheDebut); jour <= chevaucheFin; jour = addDays(jour, 1)) {
+      const heures = heuresCommandePourJour(commande, jour, champNumerique);
+      if (heures <= 0) continue;
+      totaux[chaine] = (totaux[chaine] || 0) + heures;
+    }
   }
 
   return Object.entries(totaux)
@@ -227,7 +278,7 @@ export async function getDashboardSummary(req, res) {
     // Capacité (objectif_heure) par chaîne, dérivée des commandes
     const objectifParChaine = buildObjectifParChaine(commandes, 'objectif_heure');
 
-    // Charge par chaîne pour aujourd'hui, avec objectif + pourcentage (pour les jauges)
+    // Charge par chaîne pour aujourd'hui (8h/jour, 5h le samedi, reste sur le dernier jour)
     const heuresParChaineAujourdhui = heuresParChainePourJour(
       commandes,
       'nombre_heure',
@@ -235,7 +286,7 @@ export async function getDashboardSummary(req, res) {
       objectifParChaine
     );
 
-    // Charge par chaîne pour la semaine en cours (pas d'objectif ici, demande explicite)
+    // Charge par chaîne pour la semaine en cours (même logique, sommée jour par jour)
     const heuresParChaineSemaine = heuresParChainePourSemaine(
       commandes,
       'nombre_heure',
