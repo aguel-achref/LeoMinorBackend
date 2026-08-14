@@ -41,6 +41,55 @@ function grouperEtSommer(commandes, cleGroupe, champNumerique) {
 }
 
 /**
+ * Formate une date en "YYYY-MM-DD" pour servir de clé de regroupement journalier.
+ */
+function formatDateJour(dateValue) {
+  if (!dateValue) return 'Non défini';
+  const d = new Date(dateValue);
+  if (isNaN(d.getTime())) return 'Non défini';
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Regroupe un tableau de commandes par DEUX clés (ex: chaîne + jour/semaine)
+ * et SOMME un champ numérique. Retourne une structure prête pour un graphique
+ * multi-séries :
+ * {
+ *   labels: [périodes triées],
+ *   chaines: [noms des chaînes],
+ *   series: [{ chaine, data: [totaux alignés sur labels] }]
+ * }
+ */
+function grouperEtSommerParChaineEtPeriode(commandes, champPeriode, champNumerique) {
+  const parPeriodeEtChaine = {}; // { periode: { chaine: total } }
+  const chainesSet = new Set();
+  const periodesSet = new Set();
+
+  for (const commande of commandes) {
+    const periode = commande[champPeriode] || 'Non défini';
+    const chaine = commande.chaine || 'Non défini';
+    const nombre = Number(commande[champNumerique]) || 0;
+
+    periodesSet.add(periode);
+    chainesSet.add(chaine);
+
+    if (!parPeriodeEtChaine[periode]) parPeriodeEtChaine[periode] = {};
+    parPeriodeEtChaine[periode][chaine] =
+      (parPeriodeEtChaine[periode][chaine] || 0) + nombre;
+  }
+
+  const labels = Array.from(periodesSet).sort();
+  const chaines = Array.from(chainesSet).sort();
+
+  const series = chaines.map((chaine) => ({
+    chaine,
+    data: labels.map((periode) => parPeriodeEtChaine[periode]?.[chaine] || 0),
+  }));
+
+  return { labels, chaines, series };
+}
+
+/**
  * GET /api/dashboard/summary
  * Retourne les statistiques globales pour le dashboard.
  */
@@ -59,6 +108,24 @@ export async function getDashboardSummary(req, res) {
     // Total d'heures de production nécessaires, regroupé par client
     const heuresParClient = grouperEtSommer(commandes, 'client', 'nombre_heure');
 
+    // Heures par chaîne, regroupées par jour (date_production)
+    const commandesAvecJour = commandes.map((c) => ({
+      ...c,
+      jour: formatDateJour(c.date_production),
+    }));
+    const heuresParChaineParJour = grouperEtSommerParChaineEtPeriode(
+      commandesAvecJour,
+      'jour',
+      'nombre_heure'
+    );
+
+    // Heures par chaîne, regroupées par semaine (num_semaine déjà calculé)
+    const heuresParChaineParSemaine = grouperEtSommerParChaineEtPeriode(
+      commandes,
+      'num_semaine',
+      'nombre_heure'
+    );
+
     const commandesAlerte = commandes.filter((c) =>
       ['Alerte', 'Jour disposition'].includes(c.statut)
     );
@@ -74,6 +141,8 @@ export async function getDashboardSummary(req, res) {
         commandesParClient,
         commandesParChaine,
         heuresParClient,
+        heuresParChaineParJour,
+        heuresParChaineParSemaine,
         commandesAlerte,
       },
     });
