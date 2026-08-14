@@ -78,10 +78,12 @@ function getISOWeekLabel(date) {
 }
 
 /**
- * Répartit les heures de chaque commande sur les jours réels de sa période
- * de production (date_debut_production -> date_fin_production, bornes incluses),
- * puis regroupe le résultat par chaîne et par jour, ET par chaîne et par semaine
- * ISO (dérivée du même découpage jour par jour, donc cohérente entre les deux vues).
+ * Pour chaque commande, nombre_heure représente la charge PAR JOUR (pas un total
+ * à répartir). Une commande "occupe" donc sa chaîne à raison de nombre_heure
+ * chaque jour de date_debut_production à date_fin_production (bornes incluses).
+ *
+ * Pour un jour donné, si plusieurs commandes de la même chaîne se chevauchent,
+ * leurs heures s'additionnent (charge cumulée réelle de la chaîne ce jour-là).
  *
  * Seuls les jours compris dans la fenêtre [aujourd'hui - pastDays, aujourd'hui + futureDays]
  * sont conservés, pour éviter un graphique surchargé.
@@ -100,8 +102,8 @@ function repartirHeuresParChaine(commandes, champNumerique, pastDays = 3, future
 
   for (const commande of commandes) {
     const chaine = commande.chaine || 'Non défini';
-    const totalHeures = Number(commande[champNumerique]) || 0;
-    if (totalHeures <= 0) continue;
+    const heuresParJourCommande = Number(commande[champNumerique]) || 0;
+    if (heuresParJourCommande <= 0) continue;
 
     const debut = parseDateLocal(commande.date_debut_production);
     let fin = parseDateLocal(commande.date_fin_production);
@@ -109,24 +111,18 @@ function repartirHeuresParChaine(commandes, champNumerique, pastDays = 3, future
     if (!debut) continue; // pas de date de début exploitable, on ignore cette commande
     if (!fin || fin < debut) fin = debut; // sécurité si fin manquante/incohérente
 
-    // Liste des jours de la commande (bornes incluses)
-    const joursCommande = [];
-    for (let d = new Date(debut); d <= fin; d = addDays(d, 1)) {
-      joursCommande.push(new Date(d));
-    }
-    if (joursCommande.length === 0) continue;
-
-    const heuresParJourCommande = totalHeures / joursCommande.length;
     chainesSet.add(chaine);
 
-    for (const jour of joursCommande) {
+    // Chaque jour de la période reçoit la charge PLEINE (pas divisée) de cette commande
+    for (let jour = new Date(debut); jour <= fin; jour = addDays(jour, 1)) {
       if (jour < windowStart || jour > windowEnd) continue; // hors fenêtre affichée
 
       const jourLabel = formatDateJour(jour);
       const semaineLabel = getISOWeekLabel(jour);
 
       if (!parJour[jourLabel]) parJour[jourLabel] = {};
-      parJour[jourLabel][chaine] = (parJour[jourLabel][chaine] || 0) + heuresParJourCommande;
+      parJour[jourLabel][chaine] =
+        (parJour[jourLabel][chaine] || 0) + heuresParJourCommande;
 
       if (!parSemaine[semaineLabel]) parSemaine[semaineLabel] = {};
       parSemaine[semaineLabel][chaine] =
@@ -170,8 +166,8 @@ export async function getDashboardSummary(req, res) {
     // Total d'heures de production nécessaires, regroupé par client
     const heuresParClient = grouperEtSommer(commandes, 'client', 'nombre_heure');
 
-    // Heures par chaîne réparties sur les jours réels de production
-    // (date_debut_production -> date_fin_production), vue jour + vue semaine
+    // Charge réelle par chaîne, jour par jour (nombre_heure = charge/jour, cumulée
+    // si plusieurs commandes se chevauchent sur la même chaîne le même jour)
     const { parJour: heuresParChaineParJour, parSemaine: heuresParChaineParSemaine } =
       repartirHeuresParChaine(commandes, 'nombre_heure', 3, 30);
 
